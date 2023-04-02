@@ -10,17 +10,16 @@ gss_tbl <- read_sav("../data/GSS2016.sav")%>%
   rename(workhours = HRS1) %>%
   filter(complete.cases(workhours))
 
-#removing variables with equal to or more than 75% missingness, variables are columns so subset columns
+#removing variables with equal to or more than 75% missingness, variables are columns so subset columns also need variables in numeric later
 gss_tbl <- gss_tbl[, which(colMeans(!is.na(gss_tbl)) >= 0.75)] %>%
 mutate_all(as.numeric)
 
 
-
 ##Visualization 
-#adding visualization
+#adding visualization, lets bins set to default at 30
 ggplot(gss_tbl, aes(x = workhours)) +
   geom_histogram() +
-  labs(x = "workhours")
+  labs(x = "workhours", y="frequency", title= "Univariate Distribution of Workhours")
 
 ## Analysis
 
@@ -35,18 +34,10 @@ train_gss_tbl <- shuffled_data[1:split, ] %>%
   mutate_all(as.numeric)
 test_gss_tbl <- shuffled_data[(split +1): nrow(shuffled_data),] 
 
-#creating a training vector to do 
-#10 folds
+#creating a training vector to do 10 folds
 folds <- createFolds(train_gss_tbl$workhours, 10)
-#is this the right thing to use, should be using a different fold function?
 
-#Creating gss_control to input into trControl for each model so don't have to redo it each time 
-gss_control <- trainControl(method="cv", indexOut = folds, number = 10, search = "grid", verboseIter=T) # For some reason models wont run with gss_control variable come back and figure out
-
-#Creating gss_process to input into preProcess for each model so don't have to redo it each time 
-gss_process <- c("medianImpute","nzv", "center", "scale") #also not working so manually added, delete this if cant get to work. 
-
-#OLS ready
+#OLS model created #do I need to change the preprocess?
 OLS <- train(
   workhours ~ .,
   train_gss_tbl,
@@ -55,9 +46,13 @@ OLS <- train(
   preProcess = "medianImpute",
   trControl = trainControl(method="cv", indexOut = folds, number = 10, search = "grid", verboseIter=T)
 )
-summary(OLS)
+#estimate of 10-fold CV
+OLSR<-OLS$results$Rsquared
+#estimate holdout CV, R^2 is the correlation squared
+predictOLS <- predict(OLS, test_gss_tbl, na.action = na.pass)
+OLSho <-(cor(test_gss_tbl$workhours, predictOLS))^2
 
-#Elastic Net
+#Elastic Net # Do I need to change the preprocess
 ElasticNet <-
   train(
     workhours ~ .,
@@ -67,7 +62,11 @@ ElasticNet <-
     preProcess = "medianImpute",
     trControl = trainControl(method="cv", indexOut = folds, number = 10, search = "grid", verboseIter=T)
   )
-summary(ElasticNet)
+#estimate of 10-fold CV. Took the mean because as 9 outputs
+ElasticR <-mean(ElasticNet$results$Rsquared)
+#estimate holdout CV, R^2 is the correlation squared
+predictElastic <- predict(ElasticNet, test_gss_tbl, na.action = na.pass)
+Elasticho <-(cor(test_gss_tbl$workhours, predictElastic))^2
 
 #Random forest
 RandomForest <-
@@ -79,8 +78,11 @@ RandomForest <-
     preProcess = "medianImpute",
     trControl = trainControl(method="cv", indexOut = folds, number = 10, search = "grid", verboseIter=T)
   )
-summary(RandomForest)
-
+#estimate of 10-fold CV
+RandomR<- mean(RandomForest$results$Rsquared)
+#estimate holdout CV
+predictRandom <- predict(RandomForest, test_gss_tbl, na.action = na.pass)
+Randomho <-(cor(test_gss_tbl$workhours, predictRandom))^2
 
 #XGBoost
 boost <-
@@ -92,6 +94,31 @@ boost <-
     preProcess = "medianImpute",
     trControl = trainControl(method="cv", indexOut = folds, number = 10, search = "grid", verboseIter=T)
   )
-summary(boost)
+#estimate of 10-fold CV
+boostR <- boost$results$Rsquared
+#estimate holdout CV, R^2 is the correlation squared
+predictboost <- predict(boost, test_gss_tbl, na.action = na.pass)
+boostho <-(cor(test_gss_tbl$workhours, predictboost))^2
 
 #Publication
+algo = c("OLS", "Elastic Net", "Random Forest")
+cv_rsq <- c( str_remove(round(OLSR, 2), pattern = "^0"),
+             str_remove(round(ElasticR, 2), pattern = "^0"),
+             str_remove(round(RandomR, 2), pattern = "^0"),
+             str_remove(round(boostR, 2), pattern = "^0")
+)
+
+ho_rsq = c( str_remove(round(OLSho, 2), pattern = "^0"),
+            str_remove(round(Elasticho, 2), pattern = "^0"),
+            str_remove(round(Randomho, 2), pattern = "^0"),
+            str_remove(romove(boostR, 2), pattern = "^0")
+)
+
+
+table1_tbl <- tibble(
+  algo, cv_rsq, ho_rsq
+)
+
+#1. Answers changed between models in that the R^2 value was smallest for the OLS model followed by the Elastic Net model for both 10-fold CV and holdout CV. Then the Random forest 10-fold CV was smaller than the eXtreme Gradient Boosting 10-fold CV, whereas the opposite pattern was true for the holdout CV for these two models. I think these patterns has to do with the number of parameters within each model, namely has the number of parameters increases, and the complexity of the models increases then the models have bigger R^2 values. 
+#2.Results changed between the k-fold CV and holdout CV in that the holdout CV had smaller R^2 values for each of the models compared to the k-fold CV R^2 values. I think this happened because I believe in k-fold CV the data was divided into 10 data subsets so each time that one of the 10-subsets was used as a testing set to train the model thus leading to less variabilty. 
+#3.Among the four models I would choose the Random Forest model for a real-life prediction problem. The main reason why is because the k-fold CV R^2 value for the Random Forest model was the greatest of the models. Although this is a benefit, one potential trade off of using the Random Forest model is the length of time that it took to run the model. 
