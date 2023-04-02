@@ -95,7 +95,7 @@ boost <-
     trControl = trainControl(method="cv", indexOut = folds, number = 10, search = "grid", verboseIter=T)
   )
 #estimate of 10-fold CV
-boostR <- boost$results$Rsquared
+boostR <- -mean(boost$results$Rsquared)
 #estimate holdout CV, R^2 is the correlation squared
 predictboost <- predict(boost, test_gss_tbl, na.action = na.pass)
 boostho <-(cor(test_gss_tbl$workhours, predictboost))^2
