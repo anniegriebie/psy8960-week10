@@ -43,7 +43,7 @@ OLS <- train(
   train_gss_tbl,
   method = "lm",
   na.action = na.pass,
-  preProcess = "medianImpute",
+  preProcess = c("center", "scale", "nzv", "medianImpute"),
   trControl = trainControl(method="cv", indexOut = folds, number = 10, search = "grid", verboseIter=T)
 )
 #estimate of 10-fold CV
@@ -59,7 +59,7 @@ ElasticNet <-
     train_gss_tbl, 
     method = "glmnet",
     na.action = na.pass,
-    preProcess = "medianImpute",
+    preProcess = c("center", "scale", "nzv", "medianImpute"),
     trControl = trainControl(method="cv", indexOut = folds, number = 10, search = "grid", verboseIter=T)
   )
 #estimate of 10-fold CV. Took the mean because as 9 outputs
@@ -89,36 +89,36 @@ boost <-
   train(
     workhours ~ .,
     train_gss_tbl, 
-    method = "xgbTree",
+    method = "xgbLinear",
     na.action = na.pass,
     preProcess = "medianImpute",
     trControl = trainControl(method="cv", indexOut = folds, number = 10, search = "grid", verboseIter=T)
   )
 #estimate of 10-fold CV
-boostR <- -mean(boost$results$Rsquared)
+boostR <- mean(boost$results$Rsquared)
 #estimate holdout CV, R^2 is the correlation squared
 predictboost <- predict(boost, test_gss_tbl, na.action = na.pass)
 boostho <-(cor(test_gss_tbl$workhours, predictboost))^2
 
 #Publication
-algo = c("OLS", "Elastic Net", "Random Forest")
+algo = c("OLS", "Elastic Net", "Random Forest", "eXtreme Gradient Boosting")
 cv_rsq <- c( str_remove(round(OLSR, 2), pattern = "^0"),
              str_remove(round(ElasticR, 2), pattern = "^0"),
              str_remove(round(RandomR, 2), pattern = "^0"),
              str_remove(round(boostR, 2), pattern = "^0")
 )
 
-ho_rsq = c( str_remove(round(OLSho, 2), pattern = "^0"),
+ho_rsq <- c( str_remove(round(OLSho, 2), pattern = "^0"),
             str_remove(round(Elasticho, 2), pattern = "^0"),
             str_remove(round(Randomho, 2), pattern = "^0"),
-            str_remove(romove(boostR, 2), pattern = "^0")
+            str_remove(round(boostho, 2), pattern = "^0")
 )
 
-
+#formating into tbl as specified in Canvas
 table1_tbl <- tibble(
   algo, cv_rsq, ho_rsq
 )
 
-#1. Answers changed between models in that the R^2 value was smallest for the OLS model followed by the Elastic Net model for both 10-fold CV and holdout CV. Then the Random forest 10-fold CV was smaller than the eXtreme Gradient Boosting 10-fold CV, whereas the opposite pattern was true for the holdout CV for these two models. I think these patterns has to do with the number of parameters within each model, namely has the number of parameters increases, and the complexity of the models increases then the models have bigger R^2 values. 
-#2.Results changed between the k-fold CV and holdout CV in that the holdout CV had smaller R^2 values for each of the models compared to the k-fold CV R^2 values. I think this happened because I believe in k-fold CV the data was divided into 10 data subsets so each time that one of the 10-subsets was used as a testing set to train the model thus leading to less variabilty. 
-#3.Among the four models I would choose the Random Forest model for a real-life prediction problem. The main reason why is because the k-fold CV R^2 value for the Random Forest model was the greatest of the models. Although this is a benefit, one potential trade off of using the Random Forest model is the length of time that it took to run the model. 
+#1. Answers changed across models in that for the k-fold CV the OLS and Elastic Net models had smaller R^2 values than the Random forest and Extreme gradient boosting models.I think this patterns has to do with the number of parameters within each model, namely has the number of parameters increases, and the complexity of the models increases then the models have bigger R^2 values.
+#2.Results changed between the k-fold CV and holdout CV in that the holdout CV had smaller R^2 values for each of the models compared to the k-fold CV R^2 values. I think this happened because I believe in k-fold CV the data was divided into 10 data subsets so each time that one of the 10-subsets was used as a testing set to train the model thus leading to less variability. 
+#3.Among the four models I would choose the Random Forest model for a real-life prediction problem. The main reason why is because the k-fold CV R^2 value for the Random Forest model was large for the 10-fold CV and also had a larger R^2 value for the holdout CV. Although this is a benefit, one potential trade off of using the Random Forest model is the length of time that it took to run the model. However, the time it took to run the Random Forest model was still less than the time it took to run the Extreme Gradient Boost model for the models I specified.
